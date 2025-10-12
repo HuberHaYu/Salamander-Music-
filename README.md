@@ -2,5 +2,5 @@
 针对本地、远程数据而生的超棒的播放器App
 ## 关于音频：
 ### 基于底层AudioTrack开发的音频API，拥有独立的DSP算法，能够做到低延迟的同时尽可能地输出高质量音频
-### <br><br>[公测版已发布](https://github.com/HuberHaYu/Salamander-Music-/releases/tag/v1.0.0)
+### <br><br>[最新版本 | Latest Release](https://github.com/HuberHaYu/Salamander-Music-/releases/tag/v1.0.1)
 ## 更多实时信息请关注GitHub及 -> [BiliBili](https://space.bilibili.com/194639276?spm_id_from=333.1007.0.0) <-
