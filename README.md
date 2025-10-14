@@ -158,7 +158,7 @@ Salam Player全界面使用了现代化排布，使用了全动态UI效果
 </table>
 <br><br>
 <video
-  src="https://github.com/user-attachments/assets/97da0ab2-0de4-473e-b60e-ea0144935d7e"
+  src="https://github.com/user-attachments/assets/VD.mp4"
   width="720"
   autoplay
   loop
