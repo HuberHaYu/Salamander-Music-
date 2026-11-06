@@ -1,172 +1,61 @@
 # Salam Player | 蝾螈播放器
-针对本地、远程数据而生的超棒的播放器App | A great music player app designed for both local and remote data.
-### 基于底层AudioTrack开发的音频API，拥有独立的DSP算法，能够做到低延迟的同时尽可能地输出高质量音频
-### <br><br>[最新版本 | Latest Release](https://github.com/HuberHaYu/Salamander-Music-/releases/tag/v1.0.1)
-## 关于音频处理：
-Salamander Player（Salam Player）将以AudioTrack为底层基础进行研发的音频API系统（Salam API）：
-### 音频入口：
-<br><br>使用了全链路同步低延迟系统 及DSP芯片的读取、处理功能，拥有独立的USB独占处理方式（支持外挂DSP转接及自带DSP芯片处理的有线耳机）
-#### DSP芯片读取示例：
-```java
-    public interface UsbProbeCallback {
-        void onReady(String chipVendor, String productName, String headphoneMaker, int vendorId, int productId, String serial);
-    }
-    public static final class UsbDspMeta {
-        public static volatile String chipVendor = "";
-        public static volatile String productName = "";
-        public static volatile String headphoneMaker = "";
-        public static volatile int vendorId = 0;
-        public static volatile int productId = 0;
-        public static volatile String serial = "";
-    }
-    public static String getUsbChipVendor()     { return UsbDspMeta.chipVendor; }
-    public static String getUsbProductName()    { return UsbDspMeta.productName; }
-    public static String getUsbHeadphoneMaker() { return UsbDspMeta.headphoneMaker; }
-    public static int    getUsbVendorId()       { return UsbDspMeta.vendorId; }
-    public static int    getUsbProductId()      { return UsbDspMeta.productId; }
-    public static String getUsbSerial()         { return UsbDspMeta.serial; }
 
-    private static String nz(@Nullable String s, String def) { return (s == null || s.isEmpty()) ? def : s; }
+面向本地与远程音乐库的 Android 音乐播放器。
 
-    @Nullable
-    private static String readUsbStringDesc(UsbAudioDspSession s, int index) {
-        if (index <= 0) return null;
-        byte[] buf = new byte[255];
-        int wValue = (0x03 << 8) | (index & 0xFF);
-        int r = s.controlIn(0x80, 0x06, wValue, 0x0409, buf, 200);
-        if (r >= 2 && (buf[1] & 0xFF) == 0x03) {
-            int len = Math.min(r, buf[0] & 0xFF);
-            if (len > 2) {
-                try { return new String(buf, 2, len - 2, "UTF-16LE"); } catch (Exception ignore) {}
-            }
-        }
-        return null;
-    }
-```
-### 音频处理：
-<br>Salam API拥有独立的DSP处理入口，在设备性能支持的情况下，可接入无数个DSP处理器。其中包括低频增强、虚拟低频、HRTF环绕等核心算法
-#### 算法示例（以IIR为例）：
-```java
-public byte[] process(byte[] pcmData) {
-        try {
-            short[] s = new short[pcmData.length / 2];
-            ByteBuffer.wrap(pcmData).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(s);
+## SuperDeep 沉浸歌词
 
-            final int frames = s.length / 2;
-            final int BLOCK = 192; // 防抖
+SuperDeep 把同步歌词放进实时渲染的场景中：歌词在立体空间和平面海报之间切换，镜头跟随歌曲的节拍与段落运动。画面由独立的原生渲染线程绘制，每一帧都由歌曲时间直接算出，因此进度跳转后的画面与连续播放到该处完全一致。
 
-            for (int base = 0; base < frames; base += BLOCK) {
-                int end = Math.min(base + BLOCK, frames);
-                int count = end - base;
+### 预览
 
-                // —— RMS ——
-                float sum = 0f;
-                for (int n = 0; n < count; n++) {
-                    int i = (base + n) * 2;
-                    float L = s[i] / 32768f;
-                    float R = s[i + 1] / 32768f;
-                    float a = 0.5f * (Math.abs(L) + Math.abs(R));
-                    sum += a * a;
-                }
-                float rms = (float)Math.sqrt(sum / Math.max(1, count));
-                rmsEnv += rmsCoef * (rms - rmsEnv);
+新功能窗口中的演示内容：
 
-                // —— 动态低搁架 ——
-                float t = clamp((loudnessRef - rmsEnv) / loudnessRange, 0f, 1f);
-                t = t * t * (3f - 2f * t); // Smooth Step
-                float dynDb = lsBaseDb + (enableLoudness ? (loudnessStrength * (3.5f - lsBaseDb) * t) : 0f);
-                dynDb = clamp(dynDb, -20f, 20f);
-                if (Math.abs(dynDb - lastLsDb) > 0.1f) {
-                    updateLowShelf(dynDb);
-                    lastLsDb = dynDb;
-                }
+| 城区 | 空间幕布 |
+| --- | --- |
+| <img src="SuperDeep/preview/superdeep_city.gif" width="420"/> | <img src="SuperDeep/preview/superdeep_hall.gif" width="420"/> |
 
-                // —— 处理块 —— //
-                for (int n = 0; n < count; n++) {
-                    int i = (base + n) * 2;
+### 场景模式
 
-                    float L = s[i] / 32768f;
-                    float R = s[i + 1] / 32768f;
+| 模式 | 说明 |
+| --- | --- |
+| 智能转场 | 主歌在平面海报上阅读，副歌与标题进入立体空间，两者之间通过白块转场衔接 |
+| 城区 | 整首歌在城市街道中展开，每句歌词对应一个镜头，句与句之间由镜头运动衔接 |
+| 空间幕布 | 整首歌在立体空间中展开，歌词以竖卷形式排布 |
+| 平面 | 整首歌以平面海报形式呈现 |
 
-                    // IIR EQ
-                    L = hpL.process(L);    R = hpR.process(R);
-                    L = lsL.process(L);    R = lsR.process(R);
-                    L = lmidL.process(L);  R = lmidR.process(R);
-                    L = midDipL.process(L); R = midDipR.process(R);
-                    L = upMidDipL.process(L); R = upMidDipR.process(R);
-                    L = hsL.process(L);    R = hsR.process(R);
+### 技术构成
 
-                    // ======= peaking cut =======
-                    for (int k = 0; k < highlights.size(); k++) {
-                        HighlightBand hb = highlights.get(k);
-                        if (hb.isCutMode) {
-                            L = hb.peakL.process(L);
-                            R = hb.peakR.process(R);
-                        } else {
-                            L = hb.lsNegL.process(L);
-                            R = hb.lsNegR.process(R);
+| 层 | 语言 | 职责 |
+| --- | --- | --- |
+| 视图与调度 | Kotlin | `TextureView` 承载；歌词预处理；字形栅格化与按需上传 |
+| 渲染线程 | C++ | 独立线程与 OpenGL ES 3 上下文；按垂直同步出帧；播放时钟同步；图集纹理 |
+| 渲染内核 | Rust | 场景编排、镜头、投影、几何抗锯齿、顶点与绘制命令生成；字形距离场 |
 
-                            L = hb.peakPosL.process(L);
-                            R = hb.peakPosR.process(R);
+主要特性：
 
-                            L = hb.hsNegL.process(L);
-                            R = hb.hsNegR.process(R);
-                        }
-                    }
+- 不使用 MSAA、深度缓冲、离屏渲染或全屏后处理，每帧只有少量 draw call；
+- 帧率上限 60 fps，画面静止时降为约 30 fps，暂停时停止出帧；
+- 字形以距离场形式存入常驻图集，在播放过程中按距离播放位置的远近逐批生成，跨歌曲复用；
+- 软边缘与浅色主题反色都在 GL 内完成，界面合成时只是一张纹理。
 
-                    // 末端限幅
-                    float peak = Math.max(Math.abs(L), Math.abs(R));
-                    limEnv += ((peak > limEnv) ? limAtkCoef : limRelCoef) * (peak - limEnv);
-                    float targetGain = (limEnv > LIM_CEIL) ? (LIM_CEIL / (limEnv + 1e-9f)) : 1.0f;
-                    float gCoef = (targetGain < limGain) ? limAtkCoef : limRelCoef;
-                    limGain += gCoef * (targetGain - limGain);
+完整流程见 **[SuperDeep 底层渲染流程](SuperDeep/PIPELINE.md)**，包括线程模型、场景构建、字形图集、每帧步骤、着色器、混合状态、缓冲格式、时钟同步、功耗策略和生命周期。
 
-                    L *= limGain; R *= limGain;
+### 代码
 
-                    L = softClip(L); R = softClip(R);
+| 文件 | 内容 |
+| --- | --- |
+| [`source/android/LyricStageNative.kt`](SuperDeep/source/android/LyricStageNative.kt) | JNI 接口定义 |
+| [`source/android/LyricStageView.excerpt.kt`](SuperDeep/source/android/LyricStageView.excerpt.kt) | 视图与原生渲染器的衔接、场景构建调度、字形流式上传 |
+| [`source/android/SuperDeepDemoView.java`](SuperDeep/source/android/SuperDeepDemoView.java) | 新功能窗口中的预览组件 |
+| [`source/native/stage_renderer.excerpt.cpp`](SuperDeep/source/native/stage_renderer.excerpt.cpp) | 渲染线程：消息模型、帧调度、时钟、EGL / GLES 资源、命令分派 |
+| [`source/core/lib.excerpt.rs`](SuperDeep/source/core/lib.excerpt.rs) | 渲染内核的 C ABI |
+| [`source/core/frame.excerpt.rs`](SuperDeep/source/core/frame.excerpt.rs) | 单帧输出的数据结构、绘制命令、遮罩与收尾 |
+| [`source/core/sdf.rs`](SuperDeep/source/core/sdf.rs) | 字形距离场生成 |
 
-                    s[i]     = toShort(L);
-                    s[i + 1] = toShort(R);
-                }
-            }
+## 许可
 
-            ByteBuffer.wrap(pcmData).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(s);
-            return pcmData;
-        } catch (Exception e) {
-            Log.e(TAG, "SpeakerFRShaper error: " + e.getMessage());
-            return pcmData;
-        }
-    }
-```
-<br><br>
-## 关于UI设计：
-Salam Player全界面使用了现代化排布，使用了全动态UI效果
-<table>
-  <tr>
-    <td><img src="https://huberhayu.github.io/Salamander-Music-/image/glass.jpg" width="360"/></td>
-    <td><img src="https://huberhayu.github.io/Salamander-Music-/image/album_list.jpg" width="360"/></td>
-  </tr>
-  <tr>
-    <td><img src="https://huberhayu.github.io/Salamander-Music-/image/A.jpg" width="360"/></td>
-    <td><img src="https://huberhayu.github.io/Salamander-Music-/image/B.jpg" width="360"/></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center">
-      <img src="https://huberhayu.github.io/Salamander-Music-/image/music_layout.jpg" width="540"/>
-    </td>
-  </tr>
-</table>
-<br><br>
-<video
-  src="https://github.com/user-attachments/assets/VD.mp4"
-  width="720"
-  autoplay
-  loop
-  muted
-  playsinline
-  preload="metadata"
-  controlslist="nodownload noplaybackrate noremoteplayback"
-  disablepictureinpicture>
-</video>
+本仓库内容按 [GPL-3.0](LICENSE) 发布。
 
-## 更多信息请关注GitHub及 -> [BiliBili](https://space.bilibili.com/194639276?spm_id_from=333.1007.0.0) <-
+## 更多信息
+
+[BiliBili](https://space.bilibili.com/194639276)
